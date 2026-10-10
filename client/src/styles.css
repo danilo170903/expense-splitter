@@ -172,6 +172,12 @@ h2 {
   opacity: 0.5;
 }
 
+.form-fieldset:disabled .input {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
 .field {
   display: flex;
   flex-direction: column;

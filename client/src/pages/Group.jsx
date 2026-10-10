@@ -49,7 +49,7 @@ export default function Group() {
 
   const members = group.members
   const hasMembers = members.length > 0
-  const payer = members.includes(expensePayer) ? expensePayer : (members[0] ?? '')
+  const payer = members.includes(expensePayer) ? expensePayer : ''
 
   function handleFormError(err, setFormError) {
     if (err instanceof UnauthorizedError) setUser(null)
@@ -94,7 +94,7 @@ export default function Group() {
             ))}
           </ul>
         ) : (
-          <p className="muted">Još nema učesnika.</p>
+          <p className="muted">Još nema učesnika. Dodajte prvog ispod.</p>
         )}
         <form className="form" onSubmit={handleAddMember}>
           <label className="field">
@@ -147,7 +147,11 @@ export default function Group() {
                 className="input"
                 value={payer}
                 onChange={(e) => setExpensePayer(e.target.value)}
+                required
               >
+                <option value="" disabled>
+                  Odaberite učesnika
+                </option>
                 {members.map((member) => (
                   <option key={member} value={member}>
                     {member}
@@ -165,7 +169,7 @@ export default function Group() {
 
       <Card title="Troškovi">
         {group.expenses.length === 0 ? (
-          <p className="muted">Još nema troškova.</p>
+          <p className="muted">Još nema troškova. Unesite prvi iznad.</p>
         ) : (
           <ul className="rows">
             {group.expenses.map((expense) => (
