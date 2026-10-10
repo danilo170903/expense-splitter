@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Pravila za sve AI agente u ovom repozitorijumu. Zahtjevi su u SPEC.md (još nije napisan; piše se u koraku 2).
+Pravila za sve AI agente u ovom repozitorijumu. Zahtjevi i scenariji su u SPEC.md.
 
 ## Projekat
 Expense Splitter: web aplikacija za dijeljenje troškova u grupi. Korisnik se prijavi, pravi grupe, dodaje učesnike i troškove, a aplikacija pokazuje ko kome duguje.
