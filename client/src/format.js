@@ -5,3 +5,10 @@ export function formatCents(cents) {
   const rest = String(abs % 100).padStart(2, '0')
   return `${sign}${euros},${rest} €`
 }
+
+export function formatTransfer(transfer) {
+  return {
+    title: `${transfer.from} → ${transfer.to}`,
+    amount: formatCents(transfer.amountCents),
+  }
+}

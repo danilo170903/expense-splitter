@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { addExpense, addMember, ApiError, getGroup, UnauthorizedError } from '../api.js'
 import Card from '../components/Card.jsx'
 import { useAuth } from '../auth.js'
-import { formatCents } from '../format.js'
+import { formatCents, formatTransfer } from '../format.js'
 
 export default function Group() {
   const { id } = useParams()
@@ -185,14 +185,15 @@ export default function Group() {
           <p className="muted">Svi su kvit.</p>
         ) : (
           <ul className="rows">
-            {group.settlement.transfers.map((transfer, index) => (
-              <li key={index} className="row">
-                <span className="row-title">
-                  {transfer.from} → {transfer.to}
-                </span>
-                <span className="amount">{formatCents(transfer.amountCents)}</span>
-              </li>
-            ))}
+            {group.settlement.transfers.map((transfer, index) => {
+              const row = formatTransfer(transfer)
+              return (
+                <li key={index} className="row">
+                  <span className="row-title">{row.title}</span>
+                  <span className="amount">{row.amount}</span>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>

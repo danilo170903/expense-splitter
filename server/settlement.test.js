@@ -47,6 +47,23 @@ describe('computeSettlement', () => {
     expect(result.balances).toEqual([{ name: 'Ana', netCents: 0 }])
   })
 
+  it('two expenses with the same amount paid by different people cancel out', () => {
+    const all = ['Ana', 'Marko']
+    const result = computeSettlement(
+      [
+        { payer: 'Ana', amountCents: 6000, participants: all },
+        { payer: 'Marko', amountCents: 6000, participants: all },
+      ],
+      all,
+    )
+
+    expect(result.transfers).toEqual([])
+    expect(result.balances).toEqual([
+      { name: 'Ana', netCents: 0 },
+      { name: 'Marko', netCents: 0 },
+    ])
+  })
+
   it('returns no transfers and zero balances without expenses', () => {
     const result = computeSettlement([], ['Ana', 'Marko'])
 
