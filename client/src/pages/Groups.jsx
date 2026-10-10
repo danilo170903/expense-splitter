@@ -69,7 +69,8 @@ export default function Groups() {
             {groups.map((group) => (
               <li key={group.id} className="row">
                 <Link className="row-link" to={`/groups/${group.id}`}>
-                  {group.name}
+                  <span className="row-title">{group.name}</span>
+                  <span className="chevron" aria-hidden="true">›</span>
                 </Link>
               </li>
             ))}

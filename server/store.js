@@ -11,9 +11,15 @@ function dataFilePath() {
   return process.env.DATA_FILE ? path.resolve(process.env.DATA_FILE) : DEFAULT_DATA_FILE
 }
 
+// Records written before payments existed have no `payments` field.
+function withDefaults(db) {
+  for (const group of db.groups) group.payments ??= []
+  return db
+}
+
 async function readDbFile(file) {
   try {
-    return JSON.parse(await fs.readFile(file, 'utf8'))
+    return withDefaults(JSON.parse(await fs.readFile(file, 'utf8')))
   } catch (error) {
     if (error.code === 'ENOENT') return { groups: [] }
     throw error

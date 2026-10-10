@@ -23,10 +23,12 @@ Expense Splitter: web aplikacija za dijeljenje troškova u grupi. Korisnik se pr
 
 ### Troškovi
 - Polja: naziv (obavezan, max 60 znakova), iznos (obavezan, > 0), ko je platio (jedan učesnik iz grupe).
-- Trošak se dijeli jednako na SVE učesnike grupe u trenutku unosa.
+- Trošak se dijeli jednako na izabrane učesnike (`participants`, default svi učesnici). Bar jedan učesnik je obavezan.
+- Trošak se može obrisati (DELETE). Izmjena troška nije u opsegu.
+- Dug se može označiti kao isplaćen: zapis plaćanja (`payments`) se uračunava u bilans, pa dug nestaje iz liste. Plaćanje se može poništiti (DELETE).
 - Iznos se unosi kao `90,00` ili `90.00` (oba zareza i tačke su ok). Više od 2 decimale = greška.
 - Prazan naziv, nepostojeći platilac ili iznos ≤ 0 = greška; trošak se ne čuva.
-- Troškovi se ne mijenjaju i ne brišu (nije u opsegu).
+- Troškovi se ne mijenjaju (izmjena nije u opsegu). Brisanje je dozvoljeno.
 
 ### Obračun
 - Logika je u `server/settlement.js` i radi isključivo sa cijelim brojevima u centima.
@@ -52,7 +54,10 @@ Expense Splitter: web aplikacija za dijeljenje troškova u grupi. Korisnik se pr
 - `POST /api/login` · `POST /api/logout` · `GET /api/me`
 - `GET /api/groups` · `POST /api/groups`
 - `GET /api/groups/:id` (učesnici, troškovi, dugovanja u jednom odgovoru)
-- `POST /api/groups/:id/members` · `POST /api/groups/:id/expenses`
+- `POST /api/groups/:id/members` · `POST /api/groups/:id/expenses` (body: `title`, `amount`, `payer`, `participants`)
+- `DELETE /api/groups/:id/expenses/:expenseId`
+- `POST /api/groups/:id/payments` (body: `from`, `to`, `amountCents`) · `DELETE /api/groups/:id/payments/:paymentId`
+- Detalj grupe sadrži i `payments`. Dugovanja su u `settlement.transfers`.
 - Greške: `{ "error": "poruka na bosanskom" }` uz odgovarajući HTTP status (400, 401, 404, 409 za duplo ime).
 - Iznosi u API-ju su uvijek cijeli brojevi u centima (`9000`), nikad float.
 

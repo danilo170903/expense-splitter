@@ -1,6 +1,6 @@
 import { splitCents } from './money.js'
 
-export function computeSettlement(expenses, memberNames) {
+export function computeSettlement(expenses, memberNames, payments = []) {
   const netByName = new Map(memberNames.map((name) => [name, 0]))
 
   for (const { payer, amountCents, participants } of expenses) {
@@ -9,6 +9,11 @@ export function computeSettlement(expenses, memberNames) {
     participants.forEach((name, index) => {
       netByName.set(name, netByName.get(name) - shares[index])
     })
+  }
+
+  for (const { from, to, amountCents } of payments) {
+    netByName.set(from, netByName.get(from) + amountCents)
+    netByName.set(to, netByName.get(to) - amountCents)
   }
 
   const balances = memberNames.map((name) => ({ name, netCents: netByName.get(name) }))

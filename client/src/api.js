@@ -48,8 +48,24 @@ export const getGroup = (id) => request(`/groups/${encodeURIComponent(id)}`)
 export const addMember = (groupId, name) =>
   request(`/groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { name } })
 
-export const addExpense = (groupId, { title, amount, payer }) =>
+export const addExpense = (groupId, { title, amount, payer, participants }) =>
   request(`/groups/${encodeURIComponent(groupId)}/expenses`, {
     method: 'POST',
-    body: { title, amount, payer },
+    body: { title, amount, payer, participants },
+  })
+
+export const deleteExpense = (groupId, expenseId) =>
+  request(`/groups/${encodeURIComponent(groupId)}/expenses/${encodeURIComponent(expenseId)}`, {
+    method: 'DELETE',
+  })
+
+export const markPaid = (groupId, { from, to, amountCents }) =>
+  request(`/groups/${encodeURIComponent(groupId)}/payments`, {
+    method: 'POST',
+    body: { from, to, amountCents },
+  })
+
+export const unmarkPaid = (groupId, paymentId) =>
+  request(`/groups/${encodeURIComponent(groupId)}/payments/${encodeURIComponent(paymentId)}`, {
+    method: 'DELETE',
   })

@@ -223,3 +223,206 @@ describe('nepostojeća grupa', () => {
     expect(response.body).toEqual({ error: 'Grupa nije pronađena' })
   })
 })
+
+describe('S7 - podijeljen trošak', () => {
+  it('trošak sa učesnicima Ana i Marko ne tereti Ivu', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko', 'Iva'])
+
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Gorivo', amount: '60,00', payer: 'Ana', participants: ['Ana', 'Marko'] })
+      .expect(201)
+
+    const detail = await getGroup(agent, group.id)
+    expect(detail.expenses[0].participants).toEqual(['Ana', 'Marko'])
+    expect(detail.settlement.balances.find((b) => b.name === 'Iva').netCents).toBe(0)
+    expect(detail.settlement.transfers).toEqual([{ from: 'Marko', to: 'Ana', amountCents: 3000 }])
+  })
+
+  it('participants prate redoslijed članova grupe, ne redoslijed u zahtjevu', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko', 'Iva'])
+
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Kafa', amount: '1,00', payer: 'Ana', participants: ['Iva', 'Ana', 'Marko'] })
+      .expect(201)
+
+    const detail = await getGroup(agent, group.id)
+    expect(detail.expenses[0].participants).toEqual(['Ana', 'Marko', 'Iva'])
+  })
+
+  it('prazan niz učesnika vraća 400', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko'])
+
+    const response = await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Ručak', amount: '10,00', payer: 'Ana', participants: [] })
+      .expect(400)
+    expect(response.body).toEqual({ error: 'Izaberite bar jednog učesnika' })
+
+    const detail = await getGroup(agent, group.id)
+    expect(detail.expenses).toEqual([])
+  })
+
+  it('nepoznato ime u učesnicima vraća 400', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko'])
+
+    const response = await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Ručak', amount: '10,00', payer: 'Ana', participants: ['Ana', 'Petar'] })
+      .expect(400)
+    expect(response.body).toEqual({ error: 'Izaberite bar jednog učesnika' })
+  })
+
+  it('duplo ime u učesnicima vraća 400', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko'])
+
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Ručak', amount: '10,00', payer: 'Ana', participants: ['Ana', 'Ana'] })
+      .expect(400)
+  })
+})
+
+describe('S8 - označavanje duga kao plaćenog', () => {
+  async function setupLunchAndTaxi() {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko', 'Iva'])
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Ručak', amount: '90,00', payer: 'Ana' })
+      .expect(201)
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Taksi', amount: '30,00', payer: 'Marko' })
+      .expect(201)
+    return { agent, groupId: group.id }
+  }
+
+  it('plaćanje Iva -> Ana 40,00 uklanja to dugovanje', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Iva', to: 'Ana', amountCents: 4000 })
+      .expect(201)
+    expect(response.body.payments).toEqual([
+      expect.objectContaining({ from: 'Iva', to: 'Ana', amountCents: 4000 }),
+    ])
+    expect(response.body.settlement.transfers).toEqual([
+      { from: 'Marko', to: 'Ana', amountCents: 1000 },
+    ])
+  })
+
+  it('pogrešan iznos vraća 400 i poruku o zatvorenom dugu', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Iva', to: 'Ana', amountCents: 3999 })
+      .expect(400)
+    expect(response.body).toEqual({
+      error: 'Ovaj dug više nije otvoren. Osvježite stranicu.',
+    })
+
+    const detail = await getGroup(agent, groupId)
+    expect(detail.payments).toEqual([])
+  })
+
+  it('plaćanje u smjeru koji nije dug vraća 400', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Ana', to: 'Iva', amountCents: 4000 })
+      .expect(400)
+    expect(response.body).toEqual({
+      error: 'Ovaj dug više nije otvoren. Osvježite stranicu.',
+    })
+  })
+
+  it('isti učesnik kao pošiljalac i primalac vraća 400', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Iva', to: 'Iva', amountCents: 4000 })
+      .expect(400)
+    expect(response.body).toEqual({ error: 'Neispravno plaćanje' })
+  })
+
+  it('iznos kao string vraća 400', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Iva', to: 'Ana', amountCents: '4000' })
+      .expect(400)
+    expect(response.body).toEqual({ error: 'Neispravno plaćanje' })
+  })
+
+  it('brisanje plaćanja vraća dugovanje', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const created = await agent
+      .post(`/api/groups/${groupId}/payments`)
+      .send({ from: 'Iva', to: 'Ana', amountCents: 4000 })
+      .expect(201)
+    const paymentId = created.body.payments[0].id
+
+    const response = await agent.delete(`/api/groups/${groupId}/payments/${paymentId}`).expect(200)
+    expect(response.body.payments).toEqual([])
+    expect(response.body.settlement.transfers).toEqual([
+      { from: 'Iva', to: 'Ana', amountCents: 4000 },
+      { from: 'Marko', to: 'Ana', amountCents: 1000 },
+    ])
+  })
+
+  it('brisanje nepostojećeg plaćanja vraća 404', async () => {
+    const { agent, groupId } = await setupLunchAndTaxi()
+
+    const response = await agent
+      .delete(`/api/groups/${groupId}/payments/${randomUUID()}`)
+      .expect(404)
+    expect(response.body).toEqual({ error: 'Plaćanje nije pronađeno' })
+  })
+})
+
+describe('S9 - brisanje troška', () => {
+  it('brisanje troška uklanja ga i ponovo računa dugovanja', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana', 'Marko', 'Iva'])
+    const lunch = await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Ručak', amount: '90,00', payer: 'Ana' })
+      .expect(201)
+    await agent
+      .post(`/api/groups/${group.id}/expenses`)
+      .send({ title: 'Taksi', amount: '30,00', payer: 'Marko' })
+      .expect(201)
+
+    const response = await agent
+      .delete(`/api/groups/${group.id}/expenses/${lunch.body.expenses[0].id}`)
+      .expect(200)
+    expect(response.body.expenses.map((e) => e.title)).toEqual(['Taksi'])
+    expect(response.body.settlement.transfers).toEqual([
+      { from: 'Ana', to: 'Marko', amountCents: 1000 },
+      { from: 'Iva', to: 'Marko', amountCents: 1000 },
+    ])
+  })
+
+  it('brisanje nepostojećeg troška vraća 404', async () => {
+    const agent = await loggedInAgent()
+    const group = await createGroup(agent, 'Put', ['Ana'])
+
+    const response = await agent
+      .delete(`/api/groups/${group.id}/expenses/${randomUUID()}`)
+      .expect(404)
+    expect(response.body).toEqual({ error: 'Trošak nije pronađen' })
+  })
+})

@@ -11,6 +11,9 @@ const MAX_GROUP_NAME_LENGTH = 40
 const MAX_MEMBER_NAME_LENGTH = 40
 const MAX_EXPENSE_TITLE_LENGTH = 60
 const INVALID_AMOUNT_MESSAGE = 'Neispravan iznos'
+const NO_PARTICIPANTS_MESSAGE = 'Izaberite bar jednog učesnika'
+const INVALID_PAYMENT_MESSAGE = 'Neispravno plaćanje'
+const DEBT_NOT_OPEN_MESSAGE = 'Ovaj dug više nije otvoren. Osvježite stranicu.'
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -35,9 +38,34 @@ function toGroupDetail(group) {
     id: group.id,
     name: group.name,
     members: group.members,
-    expenses: group.expenses,
-    settlement: computeSettlement(group.expenses, group.members),
+    expenses: group.expenses.map(({ id, title, amountCents, payer, participants, createdAt }) => ({
+      id,
+      title,
+      amountCents,
+      payer,
+      participants,
+      createdAt,
+    })),
+    payments: group.payments.map(({ id, from, to, amountCents, createdAt }) => ({
+      id,
+      from,
+      to,
+      amountCents,
+      createdAt,
+    })),
+    settlement: computeSettlement(group.expenses, group.members, group.payments),
   }
+}
+
+// Returns the chosen participants in group member order, or throws if the selection is invalid.
+function selectParticipants(members, chosen) {
+  const valid =
+    Array.isArray(chosen) &&
+    chosen.length > 0 &&
+    new Set(chosen).size === chosen.length &&
+    chosen.every((name) => members.includes(name))
+  if (!valid) throw new AppError(400, NO_PARTICIPANTS_MESSAGE)
+  return members.filter((name) => chosen.includes(name))
 }
 
 function safeParseAmount(value) {
@@ -106,7 +134,7 @@ export function createApp() {
       throw new AppError(400, 'Naziv grupe je obavezan (najviše 40 znakova)')
     }
     const detail = await updateDb((db) => {
-      const group = { id: randomUUID(), name, members: [], expenses: [] }
+      const group = { id: randomUUID(), name, members: [], expenses: [], payments: [] }
       db.groups.push(group)
       return toGroupDetail(group)
     })
@@ -135,7 +163,7 @@ export function createApp() {
   })
 
   app.post('/api/groups/:id/expenses', requireAuth, async (req, res) => {
-    const { title, amount, payer } = req.body ?? {}
+    const { title, amount, payer, participants } = req.body ?? {}
     const cleanTitle = cleanText(title)
     if (!isWithinLength(cleanTitle, MAX_EXPENSE_TITLE_LENGTH)) {
       throw new AppError(400, 'Naziv troška je obavezan (najviše 60 znakova)')
@@ -146,17 +174,69 @@ export function createApp() {
       if (!group.members.includes(payer)) {
         throw new AppError(400, 'Platilac mora biti učesnik grupe')
       }
+      const selected =
+        participants === undefined ? [...group.members] : selectParticipants(group.members, participants)
       group.expenses.push({
         id: randomUUID(),
         title: cleanTitle,
         amountCents,
         payer,
-        participants: [...group.members],
+        participants: selected,
         createdAt: new Date().toISOString(),
       })
       return toGroupDetail(group)
     })
     res.status(201).json(detail)
+  })
+
+  app.delete('/api/groups/:id/expenses/:expenseId', requireAuth, async (req, res) => {
+    const detail = await updateDb((db) => {
+      const group = findGroup(db, req.params.id)
+      const index = group.expenses.findIndex((expense) => expense.id === req.params.expenseId)
+      if (index === -1) throw new AppError(404, 'Trošak nije pronađen')
+      group.expenses.splice(index, 1)
+      return toGroupDetail(group)
+    })
+    res.json(detail)
+  })
+
+  app.post('/api/groups/:id/payments', requireAuth, async (req, res) => {
+    const { from, to, amountCents } = req.body ?? {}
+    const detail = await updateDb((db) => {
+      const group = findGroup(db, req.params.id)
+      if (!group.members.includes(from) || !group.members.includes(to) || from === to) {
+        throw new AppError(400, INVALID_PAYMENT_MESSAGE)
+      }
+      if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+        throw new AppError(400, INVALID_PAYMENT_MESSAGE)
+      }
+      const { transfers } = computeSettlement(group.expenses, group.members, group.payments)
+      const isOpen = transfers.some(
+        (transfer) =>
+          transfer.from === from && transfer.to === to && transfer.amountCents === amountCents,
+      )
+      if (!isOpen) throw new AppError(400, DEBT_NOT_OPEN_MESSAGE)
+      group.payments.push({
+        id: randomUUID(),
+        from,
+        to,
+        amountCents,
+        createdAt: new Date().toISOString(),
+      })
+      return toGroupDetail(group)
+    })
+    res.status(201).json(detail)
+  })
+
+  app.delete('/api/groups/:id/payments/:paymentId', requireAuth, async (req, res) => {
+    const detail = await updateDb((db) => {
+      const group = findGroup(db, req.params.id)
+      const index = group.payments.findIndex((payment) => payment.id === req.params.paymentId)
+      if (index === -1) throw new AppError(404, 'Plaćanje nije pronađeno')
+      group.payments.splice(index, 1)
+      return toGroupDetail(group)
+    })
+    res.json(detail)
   })
 
   app.use('/api', (req, res) => {
