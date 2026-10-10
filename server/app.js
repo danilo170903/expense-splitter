@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
 import session from 'express-session'
 import { checkCredentials, requireAuth } from './auth.js'
@@ -91,6 +93,12 @@ function destroySession(req) {
 export function createApp() {
   const app = express()
 
+  const isProduction = process.env.NODE_ENV === 'production'
+  if (isProduction) {
+    // Behind the hosting proxy, Express must trust X-Forwarded-Proto or secure cookies are never set.
+    app.set('trust proxy', 1)
+  }
+
   app.use(express.json())
   app.use(
     session({
@@ -100,7 +108,7 @@ export function createApp() {
       cookie: {
         httpOnly: true,
         sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProduction,
       },
     }),
   )
@@ -242,6 +250,15 @@ export function createApp() {
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'Ruta nije pronađena' })
   })
+
+  if (isProduction) {
+    const distDir = fileURLToPath(new URL('../dist', import.meta.url))
+    app.use(express.static(distDir))
+    app.use((req, res, next) => {
+      if (req.method !== 'GET') return next()
+      res.sendFile(join(distDir, 'index.html'))
+    })
+  }
 
   // Express identifies error handlers by arity, so `next` must stay even though it is unused.
   // eslint-disable-next-line no-unused-vars
